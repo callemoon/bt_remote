@@ -164,7 +164,7 @@ public:
 
         _ble.init(this, &LEDBlinkerDemo::on_init_complete);
 
-        _event_queue.call_every(500, this, &LEDBlinkerDemo::blink);
+        _event_queue.call_every(50, this, &LEDBlinkerDemo::blink);
 
         _event_queue.dispatch_forever();
     }
