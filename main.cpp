@@ -23,12 +23,12 @@
 #include "ble/gap/AdvertisingDataParser.h"
 //#include "pretty_printer.h"
 
-const static char PEER_NAME[] = "LED";
+
+unsigned char address[6] = {0xaf, 0x82, 0x01, 0xa9, 0x52, 0xb4};    // mac address of unit to connect to
 
 static EventQueue event_queue(/* event count */ 10 * EVENTS_EVENT_SIZE);
 
-static DiscoveredCharacteristic led_characteristic;
-static DiscoveredCharacteristic my_characteristic;
+static DiscoveredCharacteristic joystick_characteristic;
 static bool trigger_led_characteristic = false;
 
 Serial pc(p35, p42);
@@ -46,29 +46,7 @@ void print_mac_address()
    pc.printf("mac");  
 }
 
-void service_discovery(const DiscoveredService *service) {
-    print_error(0, "discovered service\r\n");
-    
-    if (service->getUUID().shortOrLong() == UUID::UUID_TYPE_SHORT) {
-        char buf[255];
-
-        sprintf(buf, "S UUID-%x attrs[%u %u]\r\n", service->getUUID().getShortUUID(), service->getStartHandle(), service->getEndHandle());
-        print_error(0, buf);
-    } else {
-        char buf[255];
-
-        printf("S UUID-");
-        const uint8_t *longUUIDBytes = service->getUUID().getBaseUUID();
-        for (unsigned i = 0; i < UUID::LENGTH_OF_LONG_UUID; i++) {
-            printf("%02x", longUUIDBytes[i]);
-            sprintf(&buf[i*2], "%02x", longUUIDBytes[i]);
-        }
-        print_error(0, buf);
-
-        sprintf(buf, " attrs[%u %u]\r\n", service->getStartHandle(), service->getEndHandle());
-
-        print_error(0, buf);
-    }
+void service_discovery(const DiscoveredService *service) {    
 }
 
 void update_led_characteristic(void) {
@@ -82,40 +60,13 @@ void update_led_characteristic(void) {
     int a1 = ain1.read_u16();
 
     sprintf(buf, "%4x %4x\r\n", a0, a1);
-    my_characteristic.write(strlen(buf), (const uint8_t *)buf);
-
+    joystick_characteristic.write(strlen(buf), (const uint8_t *)buf);
 }
 
 void characteristic_discovery(const DiscoveredCharacteristic *characteristicP) {
-    print_error(0, "discovered characteristic\r\n");
-    
-    char buf[16];
-    char address[16];
-    memcpy(address, characteristicP->getUUID().getBaseUUID(), 16);
-
-    print_error(0, "id:");
-    for(int i = 0; i < 16; i++)
-    {
-        sprintf(buf, "%02x-", address[i]);
-        print_error(0, buf);
-    }
-    print_error(0, "\r\n");
-
-    printf("  C UUID-%x valueAttr[%u] props[%x]\r\n", characteristicP->getUUID().getShortUUID(), characteristicP->getValueHandle(), (uint8_t)characteristicP->getProperties().broadcast());
-    if (characteristicP->getUUID().getShortUUID() == 0xa001) { /* !ALERT! Alter this filter to suit your device. */
-        led_characteristic        = *characteristicP;
-        trigger_led_characteristic = true;
-    }
-
-    print_error(0, "short:");
-    sprintf(buf, "%x", characteristicP->getUUID().getShortUUID());
-    print_error(0, buf);
-    print_error(0, "\r\n");
-
     if (characteristicP->getUUID().getShortUUID() == 0xffe1)
     {
-        my_characteristic = *characteristicP;
-        
+        joystick_characteristic = *characteristicP;
     }
 }
 
@@ -130,22 +81,9 @@ void discovery_termination(ble::connection_handle_t connectionHandle) {
 }
 
 void trigger_toggled_write(const GattReadCallbackParams *response) {
-    if (response->handle == led_characteristic.getValueHandle()) {
-        printf("trigger_toggled_write: handle %u, offset %u, len %u\r\n", response->handle, response->offset, response->len);
-        for (unsigned index = 0; index < response->len; index++) {
-            printf("%c[%02x]", response->data[index], response->data[index]);
-        }
-        printf("\r\n");
-
-        uint8_t toggledValue = response->data[0] ^ 0x1;
-        led_characteristic.write(1, &toggledValue);
-    }
 }
 
 void trigger_read(const GattWriteCallbackParams *response) {
-    if (response->handle == led_characteristic.getValueHandle()) {
-        led_characteristic.read();
-    }
 }
 
 class LEDBlinkerDemo : ble::Gap::EventHandler {
@@ -208,21 +146,6 @@ private:
 
     void onConnectionComplete(const ble::ConnectionCompleteEvent& event) {
         if (event.getOwnRole() == ble::connection_role_t::CENTRAL) {
-            char buf[255];
-
-            char address[6];
-            memcpy(address, event.getPeerAddress().data(), 6);
-
-            print_error(0, "peer address:");
-            for(int i = 0; i < 6; i++)
-            {
-                sprintf(buf, "%02x", address[i]);
-                print_error(0, buf);
-            }
-            print_error(0, "\r\n");
-
-            print_error(0, "connection complete\r\n");
-
             _ble.gattClient().onServiceDiscoveryTermination(discovery_termination);
             _ble.gattClient().launchServiceDiscovery(
                 event.getConnectionHandle(),
@@ -247,42 +170,10 @@ private:
         while (adv_data.hasNext()) {
             ble::AdvertisingDataParser::element_t field = adv_data.next();
 
-                unsigned char addressx[6];
-                char buf[255];
-
-                memcpy(addressx, event.getPeerAddress().data(), 6);
-
-                print_error(0, "peer address:");
-                for(int i = 0; i < 6; i++)
-                {
-                    sprintf(buf, "%02x", addressx[i]);
-                    print_error(0, buf);
-                }
-                print_error(0, "\r\n");
-
-            unsigned char address[6] = {0xaf, 0x82, 0x01, 0xa9, 0x52, 0xb4};
 
             if(!memcmp(event.getPeerAddress().data(), address, 6))
             /* connect to a discoverable device */
             {
-            //if (field.type == ble::adv_data_type_t::COMPLETE_LOCAL_NAME) {
-            //    field.value.size() == strlen(PEER_NAME) &&
-            //    (memcmp(field.value.data(), PEER_NAME, field.value.size()) == 0)) {
-
-                char buf[255];
-
-                snprintf(buf, field.value.size(), "%s", field.value.data());
-                print_error(0, "name:");
-                print_error(0, buf);
-                print_error(0, "\r\n");
-
-                printf("Adv from: ");
-                //print_address(event.getPeerAddress().data());
-                sprintf(buf, " rssi: %d, scan response: %u, connectable: %u\r\n",
-                       event.getRssi(), event.getType().scan_response(), event.getType().connectable());
-
-                print_error(0, buf);
-
                 ble_error_t error = _ble.gap().stopScan();
 
                 if (error) {
@@ -292,18 +183,6 @@ private:
 
                 const ble::ConnectionParameters connection_params;
             
-                char address[6];
-                memcpy(address, event.getPeerAddress().data(), 6);
-
-                print_error(0, "peer address:");
-                for(int i = 0; i < 6; i++)
-                {
-                    sprintf(buf, "%02x", address[i]);
-                    print_error(0, buf);
-                }
-                print_error(0, "\r\n");
-
-
                 error = _ble.gap().connect(
                     event.getPeerAddressType(),
                     event.getPeerAddress(),
