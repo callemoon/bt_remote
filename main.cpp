@@ -21,10 +21,9 @@
 #include "ble/DiscoveredService.h"
 #include "ble/gap/Gap.h"
 #include "ble/gap/AdvertisingDataParser.h"
-//#include "pretty_printer.h"
 
 
-unsigned char address[6] = {0xaf, 0x82, 0x01, 0xa9, 0x52, 0xb4};    // mac address of unit to connect to
+unsigned char hm10_address[6] = {0xaf, 0x82, 0x01, 0xa9, 0x52, 0xb4};    // mac address of unit to connect to
 
 static EventQueue event_queue(/* event count */ 10 * EVENTS_EVENT_SIZE);
 
@@ -170,9 +169,7 @@ private:
         while (adv_data.hasNext()) {
             ble::AdvertisingDataParser::element_t field = adv_data.next();
 
-
-            if(!memcmp(event.getPeerAddress().data(), address, 6))
-            /* connect to a discoverable device */
+            if(!memcmp(event.getPeerAddress().data(), hm10_address, 6)) // if this is the mac address we are looking for stop scanning and connect
             {
                 ble_error_t error = _ble.gap().stopScan();
 
